@@ -6,7 +6,7 @@ minimal via app:
 2. -i insert new entry to database
 3. -x export entry from database (_id export by default)
 4. -u update entry status
-5. that's it, not summary page etc for now, reuse as much code as possible, but copy-paste ok for now
+5. make 2 module, i.e. class, that works with inmport
 """
 # import sys
 import re
@@ -15,66 +15,101 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell.cell import Cell
 from pymongo import MongoClient
-from pymongo.database import Database
-from pymongo.collection import Collection
+# from pymongo.database import Database
+# from pymongo.collection import Collection
 from pymongo.errors import WriteError
 from bson import ObjectId
 from typing import List
 # from datetime import timedelta
 from datetime import datetime
 
-def connect_mongodb(url: str = None) -> MongoClient:
-    """ connect to default cloud mongo db, return client """
-    if url is None:
-        cli = MongoClient("mongodb://simon:68paU6OlBbT1FsbA@cluster0-shard-00-00-rbqhf.mongodb.net:27017,cluster0-shard-00-01-rbqhf.mongodb.net:27017,cluster0-shard-00-02-rbqhf.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true")
-    else:
-        cli = MongoClient(url)
-    return cli
+class MongoDB:
 
-def connect_database(cli: MongoClient, name: str) -> Database:
-    """ connect datebase @p name in the client, create if not exist """
-    return cli.get_database(name)
+    def __init__(self, url, db_name: str, collection_name: str):
+        if url is None:
+            self.client = MongoClient("mongodb://simon:68paU6OlBbT1FsbA@cluster0-shard-00-00-rbqhf.mongodb.net:27017,cluster0-shard-00-01-rbqhf.mongodb.net:27017,cluster0-shard-00-02-rbqhf.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true")
+        else:
+            self.client = MongoClient(url)
+        self.db = self.client.get_database(db_name)
+        self.collection = self.db.get_collection(collection_name)
 
-def close_mongodb(cli: MongoClient) -> None:
-    cli.close()
+    def __del__(self):
+        self.close_mongodb()
 
-def query_id_exist(collection: Collection, _id: ObjectId) -> bool:
-    cursor = collection.find_one({'_id': _id})
-    return cursor is not None
+    """
+    def connect_mongodb(self, url: str = None):
+        if url is None:
+            self.client = MongoClient("mongodb://simon:68paU6OlBbT1FsbA@cluster0-shard-00-00-rbqhf.mongodb.net:27017,cluster0-shard-00-01-rbqhf.mongodb.net:27017,cluster0-shard-00-02-rbqhf.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true")
+        else:
+            self.client = MongoClient(url)
+    
+    def connect_database(cli: MongoClient, name: str) -> Database:
+        return cli.get_database(name)
+    """
+    def close_mongodb(self):
+        self.client.close()
 
-def query_delete(collection: Collection, _id: ObjectId) -> None:
-    collection.delete_one({'_id': _id})
+    def query_id_exist(self, _id: ObjectId) -> bool:
+        cursor = self.collection.find_one({'_id': _id})
+        return cursor is not None
 
-def query_insert_one(collection: Collection, doc: dict, flag_auto_id) -> bool:
-    if flag_auto_id:
-        new_doc = {}
-        for (key, value) in zip(doc.keys(), doc.values()):
-            if key != '_id':
-                new_doc[key] = value
-    else:
-        new_doc = doc
-    try:
-        collection.insert_one(new_doc)
-    except WriteError as error:
-        print('Insertion failed with', error.details)
-        return False
-    return True
+    def query_delete(self, _id: ObjectId) -> None:
+        self.collection.delete_one({'_id': _id})
 
-def str_to_int(string: str) -> int:
+    def query_insert_one(self, doc: dict, flag_auto_id) -> bool:
+        if flag_auto_id:
+            new_doc = {}
+            for (key, value) in zip(doc.keys(), doc.values()):
+                if key != '_id':
+                    new_doc[key] = value
+        else:
+            new_doc = doc
+        try:
+            self.collection.insert_one(new_doc)
+        except WriteError as error:
+            print('Insertion failed with', error.details)
+            return False
+        return True
+
+    def insert_all(self, doc_list: List[dict], flag_auto_id=True) -> int:
+        insert_count = 0
+        for doc in doc_list:
+            if self.query_insert_one(doc, flag_auto_id):
+                insert_count += 1
+        return insert_count
+
+    def find_all(self) -> List[dict]:
+        cursor = self.collection.find()
+        return list(cursor)
+
+    def update_all(self, doc_list: List[dict]) -> int:
+        """ find and update using _id by delete and re-insert, TODO: change later to modify """
+        update_count = 0
+        for doc in doc_list:
+            if self.query_id_exist(doc['_id']):
+                self.query_delete(doc['_id'])
+                if self.query_insert_one(doc, True):
+                    update_count += 1
+            else:
+                print(doc['_id'], 'not found, skip')
+        return update_count
+
+
+def _str_to_int(string: str) -> int:
     try:
         rest = int(string)
     except ValueError:
         rest = None
     return rest
 
-def get_keys(row: tuple) -> dict:
+def _get_keys(row: tuple) -> dict:
     rest = {}
     for item in row:    # type: Cell
         if item.value is not None and str(item.value) != '':
             rest[item.value] = item.col_idx-1   # col_index start at 1
     return rest
 
-def get_format_doc_from_row(keys: dict, row: tuple, critical_keys: List = None) -> dict:
+def _get_format_doc_from_row(keys: dict, row: tuple, critical_keys: List = None) -> dict:
     """ return a document with _id field, and there is a date key
     only 5 possible data type: None, str, date, int, IdObject string  """
     doc = {}
@@ -103,89 +138,68 @@ def get_format_doc_from_row(keys: dict, row: tuple, critical_keys: List = None) 
         doc = None
     return doc
 
-def get_valid_doc_from_xlsx(filename: str, critical_keys: List = None) -> List:
-    wb = openpyxl.load_workbook(filename)
-    ws = wb.worksheets[0]         # type: Worksheet
-    keys = {}
-    doc_list = []
-    for i, row in enumerate(ws):
-        # first row is key string
-        if i == 0:
-            keys = get_keys(row)
-            continue
-        # rest row are data entries, format doc before insertion
-        doc = get_format_doc_from_row(keys, row, critical_keys)
-        if doc is not None:
-            doc_list.append(doc)
-    wb.close()
-    return doc_list
+class XlsxFile:
 
-def write_doc_to_xlsx(filename: str, doc_list: List[dict]):
-    if len(doc_list) == 0:
-        return
-    wb = openpyxl.Workbook()
-    ws = wb.worksheets[0]         # type: Worksheet
-    # first row is key, write key
-    row = 1
-    for j, key in enumerate(doc_list[0].keys()):
-        ws.cell(row, j+1).value = key
-    row += 1
-    # write content
-    for doc in doc_list:
-        for j, (key, value) in enumerate(zip(doc.keys(), doc.values())):
-            if key == '_id':
-                value = str(value)
-            elif key == 'date':
-                value = str(value)[:10]
-            ws.cell(row, j+1).value = value
-        row += 1
-    wb.save(filename)
-    wb.close()
-
-def db_insert(db_name: str, collection_name: str, doc_list: List[dict], flag_auto_id=True) -> int:
-    client = connect_mongodb()
-    db = connect_database(client, db_name)
-    collection = db.get_collection(collection_name)
-    insert_count = 0
-    for doc in doc_list:
-        if query_insert_one(collection, doc, flag_auto_id):
-            insert_count += 1
-    return insert_count
-
-def db_find_all(db_name: str, collection_name: str) -> List[dict]:
-    client = connect_mongodb()
-    db = connect_database(client, db_name)
-    collection = db.get_collection(collection_name)
-    cursor = collection.find()
-    return list(cursor)
-
-def db_update(db_name: str, collection_name: str, doc_list: List[dict]) -> int:
-    """ find and update using _id by delete and re-insert, TODO: change later to modify """
-    client = connect_mongodb()
-    db = connect_database(client, db_name)
-    collection = db.get_collection(collection_name)
-    update_count = 0
-    for doc in doc_list:
-        if query_id_exist(collection, doc['_id']):
-            query_delete(collection, doc['_id'])
-            if query_insert_one(collection, doc, True):
-                update_count += 1
+    def __init__(self, filename: str, flag_create=False):
+        """ create/open xlsx file, point to sheet index 0 """
+        self.filename = filename
+        if flag_create:
+            self.wb = openpyxl.Workbook()
         else:
-            print(doc['_id'], 'not found, skip')
-    return update_count
+            self.wb = openpyxl.load_workbook(self.filename)
+        self.ws = self.wb.worksheets[0]  # type: Worksheet
+
+    def close(self, flag_save=False):
+        if flag_save:
+            self.wb.save(self.filename)
+        self.wb.close()
+
+    def change_sheet(self, index: int = 0, name: str = None) -> bool:
+        try:
+            if index:
+                tmp_ws = self.wb.worksheets[index]
+            elif name:
+                tmp_ws = self.wb[name]
+            else:
+                return False
+        except IndexError:
+            return False
+        self.ws = tmp_ws
+        return True
+
+    def get_valid_doc_from_xlsx(self, critical_keys: List = None) -> List:
+        keys = {}
+        doc_list = []
+        for i, row in enumerate(self.ws):
+            # first row is key string
+            if i == 0:
+                keys = _get_keys(row)
+                continue
+            # rest row are data entries, format doc before insertion
+            doc = _get_format_doc_from_row(keys, row, critical_keys)
+            if doc is not None:
+                doc_list.append(doc)
+        return doc_list
+
+    def write_doc_to_xlsx(self, doc_list: List[dict]):
+        if len(doc_list) == 0:
+            return
+        # first row is key, write key
+        row = 1
+        for j, key in enumerate(doc_list[0].keys()):
+            self.ws.cell(row, j+1).value = key
+        row += 1
+        # write content
+        for doc in doc_list:
+            for j, (key, value) in enumerate(zip(doc.keys(), doc.values())):
+                if key == '_id':
+                    value = str(value)
+                elif key == 'date':
+                    value = str(value)[:10]
+                self.ws.cell(row, j+1).value = value
+            row += 1
+        self.wb.save(self.filename)
 
 # end of module
-
-
-# start top level
-if __name__ == '__main__':
-    # plan_list = get_valid_doc_from_xlsx('plan.xlsx')
-    # print('Insertion count ==> ', db_insert('tracker', 'simon', plan_list))
-    # write_doc_to_xlsx('output.xlsx', db_find_all('tracker', 'simon'))
-
-    update_list = get_valid_doc_from_xlsx('update.xlsx', ['_id'])
-    print('Update count ==> ', db_update('tracker', 'simon', update_list))
-
-# end of top level
 
 # end of file
