@@ -34,6 +34,7 @@ class MongoDB:
         self.collection = self.db.get_collection(collection_name)
 
     def __del__(self):
+        print('Connection closed')
         self.close_mongodb()
 
     """
@@ -83,16 +84,54 @@ class MongoDB:
         return list(cursor)
 
     def update_all(self, doc_list: List[dict]) -> int:
-        """ find and update using _id by delete and re-insert, TODO: change later to modify """
+        """ find and update using _id by delete and reinster with same _id """
         update_count = 0
         for doc in doc_list:
             if self.query_id_exist(doc['_id']):
                 self.query_delete(doc['_id'])
-                if self.query_insert_one(doc, True):
+                if self.query_insert_one(doc, flag_auto_id=False):
                     update_count += 1
             else:
                 print(doc['_id'], 'not found, skip')
         return update_count
+
+    def find_between_values(self, key: str, start, end) -> List[dict]:
+        if start is None and end is None:
+            return []
+        if start is None:
+            cursor = self.collection.find({
+                key: {'$lt': end}
+            })
+        elif end is None:
+            cursor = self.collection.find({
+                key: {'$gte': start}
+            })
+        else:
+            cursor = self.collection.find({
+                key: {'$gte': start, '$lt': end}
+            })
+        return list(cursor)
+
+    def find_key_between_values(self, key1: str, value1, rangekey: str, start, end, flag_eq=True) -> List[dict]:
+        if start is None and end is None:
+            return []
+        operator = '$eq' if flag_eq else '$ne'
+        if start is None:
+            cursor = self.collection.find({
+                rangekey: {'$lt': end},
+                key1: {operator: value1},
+            })
+        elif end is None:
+            cursor = self.collection.find({
+                rangekey: {'$gte': start},
+                key1: {operator: value1},
+            })
+        else:
+            cursor = self.collection.find({
+                rangekey: {'$gte': start, '$lt': end},
+                key1: {operator: value1}
+            })
+        return list(cursor)
 
 
 def _str_to_int(string: str) -> int:
@@ -130,6 +169,9 @@ def _get_format_doc_from_row(keys: dict, row: tuple, critical_keys: List = None)
         doc['date'] = datetime(int(datestr) // 10000, (int(datestr) // 100) % 100, int(datestr) % 100)
     else:
         doc['date'] = None
+    # format status field
+    if doc['status'] is None:
+        doc['status'] = 'active'
     # check valid entry against critical key list
     if critical_keys is not None and critical_keys != []:
         for key in critical_keys:
