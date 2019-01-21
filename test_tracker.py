@@ -77,7 +77,7 @@ class MainFrame:
         rslt = ''
         for item in tmplist:
             tmp = "%s %s %s %d points %s [%s]\n" % (str(item['_id']), item['status'], str(item['date'])[:10],
-                                                 item['points'], item['task'], item['update'])
+                                                    item['points'], item['task'], item['update'])
             rslt += tmp
         return rslt
 
