@@ -97,7 +97,7 @@ class MongoDB:
 
     def find_between_values(self, key: str, start, end) -> List[dict]:
         if start is None and end is None:
-            return []
+            return self.find_all()
         if start is None:
             cursor = self.collection.find({
                 key: {'$lt': end}
