@@ -27,7 +27,8 @@ class MongoDB:
 
     def __init__(self, url, db_name: str, collection_name: str):
         if url is None:
-            self.client = MongoClient("mongodb://simon:68paU6OlBbT1FsbA@cluster0-shard-00-00-rbqhf.mongodb.net:27017,cluster0-shard-00-01-rbqhf.mongodb.net:27017,cluster0-shard-00-02-rbqhf.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true")
+            # self.client = MongoClient("mongodb://simon:68paU6OlBbT1FsbA@cluster0-shard-00-00-rbqhf.mongodb.net:27017,cluster0-shard-00-01-rbqhf.mongodb.net:27017,cluster0-shard-00-02-rbqhf.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true")
+            self.client = MongoClient("mongodb://ping:MVFYTmDRNuh5D60t@cluster0-shard-00-00-rbqhf.mongodb.net:27017,cluster0-shard-00-01-rbqhf.mongodb.net:27017,cluster0-shard-00-02-rbqhf.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true")
         else:
             self.client = MongoClient(url)
         self.db = self.client.get_database(db_name)
