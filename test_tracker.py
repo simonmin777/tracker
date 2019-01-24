@@ -26,7 +26,9 @@ class BasicFuntionTest(unittest.TestCase):
 class MainFrame:
 
     def __init__(self, db_name: str, username: str):
-        self.db = MongoDB(None, db_name, username)
+        with open('url.txt') as furl:
+            url = furl.readline().strip()
+        self.db = MongoDB(url, db_name, username)
         self.root = Tk()
         self.today_start = datetime(datetime.today().year, datetime.today().month, datetime.today().day)
         self.today_end = self.today_start + timedelta(days=1)
@@ -69,22 +71,24 @@ class MainFrame:
         bt_update = Button(right_panel, padx=10, pady=10)
         bt_update.config(text='update', command=self.update_on_date)
         bt_update.pack(side=TOP, fill=X)
-        # import button
+        # import xlsx button
         self.bt_import_xlsx = Button(right_panel)
         self.bt_import_xlsx.config(text='import xlsx', command=self.import_with_xlsx)
         self.bt_import_xlsx.pack(side=TOP, fill=X)
-        # update button
+        # update xlsx button
         self.bt_update_xlsx = Button(right_panel)
         self.bt_update_xlsx.config(text='update xlsx', command=self.update_with_xlsx)
         self.bt_update_xlsx.pack(side=TOP, fill=X)
-        # export button
+        # export xlsx button
         self.bt_export_xlsx = Button(right_panel)
         self.bt_export_xlsx.config(text='export xlsx', command=self.export_with_xlsx)
         self.bt_export_xlsx.pack(side=TOP, fill=X)
-        # export all button
+        # export all xlsx button
         self.bt_export_all = Button(right_panel)
         self.bt_export_all.config(text='export all', command=self.export_all_with_xlsx)
         self.bt_export_all.pack(side=TOP, fill=X)
+
+        self.query_on_date()
 
     def _postfix(self):
         postfix = [{'_id': None, 'status': ' ', 'date': None, 'points': 0, 'task': ' ', 'update': ' '}]
@@ -163,8 +167,14 @@ class MainFrame:
         self.today_start = datetime(self.var_date['year'].get(), self.var_date['month'].get(), self.var_date['day'].get())
         self.today_end = self.today_start + timedelta(days=1)
         self.showlist = self.db.find_between_values('date', self.today_start, self.today_end)
-        query_count = self.db.update_all(self.showlist)
-        tmpstr = 'query count = %d\n' % query_count
+        tmpstr = 'query count = %d' % len(self.showlist)
+        total_points = 0
+        active_points = 0
+        for item in self.showlist:
+            if item['status'] == 'active':
+                active_points += item['points']
+            total_points += item['points']
+        tmpstr += ' points active/total = %d / %d' % (active_points, total_points)
         self.lb1.config(text=tmpstr)
         self._assign_var_left_panel()
 
@@ -178,7 +188,7 @@ class MainFrame:
                 update_list.append(new_item)
             else:
                 insert_list.append(new_item)
-        tmpstr = 'update count = %d insert count = %d\n' % (len(update_list), len(insert_list))
+        tmpstr = 'update count = %d insert count = %d' % (len(update_list), len(insert_list))
         self.lb1.config(text=tmpstr)
         self.db.update_all(update_list)
         self.db.insert_all(insert_list, True)
